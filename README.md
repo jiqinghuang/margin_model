@@ -1,8 +1,8 @@
-# Margin Model — Gold & Silver Wind Futures Index
+# 保证金模型 — 黄金 & 白银 Wind 期货指数
 
-A three-stage pipeline for calculating margin requirements on Wind Futures Index data for gold (Au) and silver (Ag), based on EWMA volatility and VaR methodology.
+基于 EWMA 波动率和 VaR 方法的三阶段保证金计算模型，覆盖黄金 (Au) 和白银 (Ag) Wind 期货指数数据。
 
-## Architecture
+## 架构
 
 ```
 AUFI_WI.parquet ──┐
@@ -11,61 +11,61 @@ AGFI_WI.parquet ──┘                                                   └�
                                                                                        backtest_results.xlsx
 ```
 
-### Stage 1: Data Processing (`data_processor.py`)
+### 第一阶段：数据处理 (`data_processor.py`)
 
-- Loads Wind futures index parquet files (OHLCV format)
-- Computes log returns from closing prices
-- Applies EWMA volatility with λ=0.98 (RiskMetrics-style decay)
-- Calculates VaR at 99%, 99.7%, 99.99% confidence under a lognormal assumption
-- Outputs `processed_data.parquet`
+- 加载 Wind 期货指数 parquet 文件（OHLCV 格式）
+- 基于收盘价计算对数收益率
+- 应用 EWMA 波动率模型（λ=0.98，RiskMetrics 风格衰减）
+- 在对数正态假设下计算 99%、99.7%、99.99% 置信度的 VaR
+- 输出 `processed_data.parquet`
 
-### Stage 2: Stress Testing (`stress_test.py`)
+### 第二阶段：压力测试 (`stress_test.py`)
 
-Three-part analysis:
-1. **N-day Forward VaR** — scales EWMA volatility by √N for horizons [1, 1.8, 2, 2.8]
-2. **Manual Volatility Override** — VaR under fixed volatilities (Au 2%, Ag 4%)
-3. **Price Shock Scenarios** — post-shock variance via λ·σ² + (1−λ)·ln(1+z)² for shocks of 2%–15%
+三部分分析：
+1. **N 日远期 VaR** — 将 EWMA 波动率乘以 √N，覆盖 [1, 1.8, 2, 2.8] 天
+2. **手动波动率覆盖** — 固定波动率假设下的 VaR（Au 2%, Ag 4%）
+3. **价格冲击情景** — 冲击后方差 λ·σ² + (1−λ)·ln(1+z)²，冲击幅度 2%–15%
 
-### Stage 3: Backtesting (`backtest.py`)
+### 第三阶段：回测 (`backtest.py`)
 
-- **Method 1** — counts days where |return| exceeds 99% VaR with minimum return threshold (Au 2%, Ag 4%), 250-day rolling window
-- **Method 2** — scales volatility by √1.8 before recalculating VaR, then counts breakthroughs
-- Generates per-metal PNG charts (|Return| vs 99% and 99.99% VaR)
-- Exports `backtest_results.xlsx`
+- **方法一** — 统计 |收益率| 同时超过 99% VaR 和最低阈值（Au 2%, Ag 4%）的天数，250 日滚动窗口
+- **方法二** — 将波动率放大 √1.8 后重新计算 VaR，统计突破天数
+- 生成每个品种的独立 PNG 图表（|收益率| vs 99% VaR 和 99.99% VaR）
+- 导出 `backtest_results.xlsx`
 
-## Quick Start
+## 快速开始
 
 ```bash
 pip install numpy pandas scipy matplotlib openpyxl
 python run_all.py
 ```
 
-## Output
+## 输出文件
 
-| File | Description |
-|------|-------------|
-| `processed_data.parquet` | Processed data with returns, volatility, VaR columns |
-| `output_Au.png` | Au backtest chart |
-| `output_Ag.png` | Ag backtest chart |
-| `backtest_results.xlsx` | Backtest results (both methods) |
+| 文件 | 说明 |
+|------|------|
+| `processed_data.parquet` | 包含收益率、波动率、VaR 列的处理后数据 |
+| `output_Au.png` | 黄金回测图 |
+| `output_Ag.png` | 白银回测图 |
+| `backtest_results.xlsx` | 回测结果（两种方法） |
 
-## Data
+## 数据
 
-Wind Commodity Futures Index daily data with columns: `date`, `open`, `high`, `low`, `close`, `settle`, `volume`, `oi`, `amt`. Uses `close` for pricing.
+Wind 商品期货指数日线数据，包含列：`date`, `open`, `high`, `low`, `close`, `settle`, `volume`, `oi`, `amt`。模型仅使用 `close` 列进行定价。
 
-- Au: 2008-01-09 ~ present (~4,460 rows)
-- Ag: 2012-05-10 ~ present (~3,400 rows)
+- Au：2008-01-09 ~ 至今（约 4,460 行）
+- Ag：2012-05-10 ~ 至今（约 3,400 行）
 
-## Parameters
+## 参数
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `DECAY_FACTOR` | 0.98 | EWMA decay factor λ |
-| `TOLERANCE_LEVEL` | 0.01 | EWMA initialization window tolerance (yields k=228) |
-| `ALPHA_LIST` | [0.01, 0.003, 0.0001] | VaR confidence levels (99%, 99.7%, 99.99%) |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `DECAY_FACTOR` | 0.98 | EWMA 衰减因子 λ |
+| `TOLERANCE_LEVEL` | 0.01 | EWMA 初始化窗口容差（得到 k=228） |
+| `ALPHA_LIST` | [0.01, 0.003, 0.0001] | VaR 置信水平（99%, 99.7%, 99.99%） |
 
-## Methodology Notes
+## 方法说明
 
-- **Two-tailed VaR**: uses z_{α/2} rather than one-tailed z_α, producing more conservative margin estimates (at 99%: z=2.576 vs z=2.326)
-- **Lognormal VaR**: VaR = exp(z · σ) − 1, assuming log returns ~ N(0, σ²)
-- **EWMA**: initialization window k=228, recurrence v_{t+1} = λ·v_t + (1−λ)·r_t²
+- **双尾 VaR**：使用 z_{α/2} 而非单尾 z_α，产生更保守的保证金估计（99% 下：z=2.576 vs z=2.326）
+- **对数正态 VaR**：VaR = exp(z · σ) − 1，假设对数收益率服从 N(0, σ²)
+- **EWMA**：初始化窗口 k=228，递推公式 v_{t+1} = λ·v_t + (1−λ)·r_t²
