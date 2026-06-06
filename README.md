@@ -63,6 +63,21 @@ Wind 商品期货指数日线数据，包含列：`date`, `open`, `high`, `low`,
 - Au：2008-01-09 ~ 2026-06-06（约 4,460 行）
 - Ag：2012-05-10 ~ 2026-06-06（约 3,400 行）
 
+## 网站同步 (`sync_to_website.py`)
+
+将模型结果同步到 [个人网站](https://jiqinghuang.github.io/)（GitHub Pages）的辅助脚本。
+
+```bash
+python sync_to_website.py
+```
+
+自动化流程：
+1. 运行完整模型管道（data_processor → backtest）
+2. 将 `output_Au.png` / `output_Ag.png` 复制到网站的 `assets/plots/` 目录
+3. 更新 HTML 页面中的统计数据、日期范围和回测结果表格
+
+需要本地存在 `jiqinghuang.github.io` 仓库。详细说明见 `SYNC_README.md`。
+
 ## 参数
 
 | 参数 | 默认值 | 说明 |
