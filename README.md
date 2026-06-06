@@ -88,6 +88,6 @@ python sync_to_website.py
 
 ## 方法说明
 
-- **双尾 VaR**：使用 z_{α/2} 而非单尾 z_α，产生更保守的保证金估计（99% 下：z=2.576 vs z=2.326）
-- **对数正态 VaR**：VaR = exp(z · σ) − 1，假设对数收益率服从 N(0, σ²)
-- **EWMA**：初始化窗口 k=228，递推公式 v_{t+1} = λ·v_t + (1−λ)·r_t²
+- **双尾 VaR**：使用 $z_{\alpha/2}$ 而非单尾 $z_\alpha$，产生更保守的保证金估计（99% 下：$z=2.576$ vs $z=2.326$）
+- **对数正态 VaR**：$\text{VaR} = \exp(z \cdot \sigma) - 1$，假设对数收益率服从 $N(0, \sigma^2)$
+- **EWMA**：初始化窗口 $k=228$，递推公式 $v_{t+1} = \lambda \cdot v_t + (1-\lambda) \cdot r_t^2$
