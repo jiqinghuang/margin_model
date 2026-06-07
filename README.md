@@ -96,7 +96,7 @@ python sync_to_website.py
 
 ## 方法说明
 
-- **双尾 VaR**：使用 $$z_{\alpha/2}$$ 而非单尾 $$z_\alpha$$，产生更保守的保证金估计（99% 下：$$z=2.576$$ vs $$z=2.326$$）
+- **双尾 VaR**：使用 $$z_{\alpha/2}$$ 而非单尾 $$z_\alpha$$，产生更保守的保证金估计（99% 下： $z=2.576$ vs $z=2.326$ ）
 - **对数正态 VaR**：
   $$\text{VaR}=\exp(z\cdot\sigma)-1$$
   假设对数收益率服从 $$N(0,\sigma^2)$$
