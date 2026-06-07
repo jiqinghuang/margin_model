@@ -21,8 +21,11 @@ AGFI_WI.parquet ──┘                                                   └�
 ### 第一阶段：数据处理 (`data_processor.py`)
 
 - 加载 Wind 期货指数 parquet 文件（OHLCV 格式）
-- 基于收盘价计算对数收益率
+- 基于收盘价计算对数收益率：$r_t = \ln(1 + \frac{P_t - P_{t-1}}{P_{t-1}})$
 - 应用 EWMA 波动率模型（λ=0.98，RiskMetrics 风格衰减）
+  - 初始化：$v_k = (1 - \lambda) \sum_{i=0}^{k-1} \lambda^i \cdot r_{k-i}^2$
+  - 递推：$v_{t+1} = \lambda \cdot v_t + (1 - \lambda) \cdot r_t^2$
+  - 初始化窗口 $k = \lceil \ln(\text{tol}) / \ln(\lambda) \rceil = 228$（tol=0.01）
 - 在对数正态假设下计算 99%、99.7%、99.99% 置信度的 VaR
 - 输出 `processed_data.parquet`
 
@@ -31,12 +34,12 @@ AGFI_WI.parquet ──┘                                                   └�
 三部分分析：
 1. **N 日远期 VaR** — 将 EWMA 波动率乘以 √N，覆盖 [1, 1.8, 2, 2.8] 天
 2. **手动波动率覆盖** — 固定波动率假设下的 VaR（Au 2%, Ag 4%）
-3. **价格冲击情景** — 冲击后方差 λ·σ² + (1−λ)·ln(1+z)²，冲击幅度 2%–15%
+3. **价格冲击情景** — 冲击后方差 $\lambda \cdot \sigma^2 + (1 - \lambda) \cdot \ln(1 + z)^2$，冲击幅度 $z \in \{2\%, 4\%, 8\%, 10\%, 12\%, 15\%\}$
 
 ### 第三阶段：回测 (`backtest.py`)
 
 - **方法一** — 统计 |收益率| 同时超过 99% VaR 和最低阈值（Au 2%, Ag 4%）的天数，250 日滚动窗口
-- **方法二** — 将波动率放大 √1.8 后重新计算 VaR，统计突破天数
+- **方法二** — 将方差放大 η=1.8 倍（标准差乘以 √1.8）后重新计算 VaR，统计突破天数
 - 生成每个品种的独立 PNG 图表（|收益率| vs 99% VaR 和 99.99% VaR）
 - 导出 `backtest_results.xlsx`
 
