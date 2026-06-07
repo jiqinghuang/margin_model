@@ -21,11 +21,14 @@ AGFI_WI.parquet ──┘                                                   └�
 ### 第一阶段：数据处理 (`data_processor.py`)
 
 - 加载 Wind 期货指数 parquet 文件（OHLCV 格式）
-- 基于收盘价计算对数收益率：$r_t = \ln(1 + \frac{P_t - P_{t-1}}{P_{t-1}})$
+- 基于收盘价计算对数收益率：
+  $$r_t = \ln\!\left(1 + \frac{P_t - P_{t-1}}{P_{t-1}}\right)$$
 - 应用 EWMA 波动率模型（λ=0.98，RiskMetrics 风格衰减）
-  - 初始化：$v_k = (1 - \lambda) \sum_{i=0}^{k-1} \lambda^i \cdot r_{k-i}^2$
-  - 递推：$v_{t+1} = \lambda \cdot v_t + (1 - \lambda) \cdot r_t^2$
-  - 初始化窗口 $k = \lceil \ln(\text{tol}) / \ln(\lambda) \rceil = 228$（tol=0.01）
+  - 初始化：
+    $$v_k = (1-\lambda)\sum_{i=0}^{k-1}\lambda^i \cdot r_{k-i}^2$$
+  - 递推：
+    $$v_{t+1}=\lambda\cdot v_t+(1-\lambda)\cdot r_t^2$$
+  - 初始化窗口 $$k=\lceil\ln(\text{tol})/\ln(\lambda)\rceil=228$$（tol=0.01）
 - 在对数正态假设下计算 99%、99.7%、99.99% 置信度的 VaR
 - 输出 `processed_data.parquet`
 
@@ -34,7 +37,9 @@ AGFI_WI.parquet ──┘                                                   └�
 三部分分析：
 1. **N 日远期 VaR** — 将 EWMA 波动率乘以 √N，覆盖 [1, 1.8, 2, 2.8] 天
 2. **手动波动率覆盖** — 固定波动率假设下的 VaR（Au 2%, Ag 4%）
-3. **价格冲击情景** — 冲击后方差 $\lambda \cdot \sigma^2 + (1 - \lambda) \cdot \ln(1 + z)^2$，冲击幅度 $z \in \{2\%, 4\%, 8\%, 10\%, 12\%, 15\%\}$
+3. **价格冲击情景** — 冲击后方差
+   $$\lambda\cdot\sigma^2+(1-\lambda)\cdot\ln(1+z)^2$$
+   冲击幅度 $$z \in \\{2\%,4\%,8\%,10\%,12\%,15\%\\}$$
 
 ### 第三阶段：回测 (`backtest.py`)
 
@@ -91,6 +96,9 @@ python sync_to_website.py
 
 ## 方法说明
 
-- **双尾 VaR**：使用 $z_{\alpha/2}$ 而非单尾 $z_\alpha$，产生更保守的保证金估计（99% 下：$z=2.576$ vs $z=2.326$）
-- **对数正态 VaR**：$\text{VaR} = \exp(z \cdot \sigma) - 1$，假设对数收益率服从 $N(0, \sigma^2)$
-- **EWMA**：初始化窗口 $k=228$，递推公式 $v_{t+1} = \lambda \cdot v_t + (1 - \lambda) \cdot r_t^2$
+- **双尾 VaR**：使用 $$z_{\alpha/2}$$ 而非单尾 $$z_\alpha$$，产生更保守的保证金估计（99% 下：$$z=2.576$$ vs $$z=2.326$$）
+- **对数正态 VaR**：
+  $$\text{VaR}=\exp(z\cdot\sigma)-1$$
+  假设对数收益率服从 $$N(0,\sigma^2)$$
+- **EWMA**：初始化窗口 $$k=228$$，递推公式
+  $$v_{t+1}=\lambda\cdot v_t+(1-\lambda)\cdot r_t^2$$
