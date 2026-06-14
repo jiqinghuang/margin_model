@@ -35,4 +35,4 @@ Three-stage pipeline for calculating margin requirements on Wind Futures Index d
 
 ## Data
 
-Input parquet files contain Wind Commodity Futures Index daily data with columns: `date`, `open`, `high`, `low`, `close`, `settle`, `volume`, `oi`, `amt`. Au data starts 2008-01-09 (~4460 rows), Ag data starts 2012-05-10 (~3400 rows). The model uses only the `close` column for pricing.
+Input parquet files contain Wind Commodity Futures Index daily data with columns: `date`, `open`, `high`, `low`, `close`, `settle`, `volume`, `oi`, `amt`. Au data starts 2008-01-09 (~4477 rows), Ag data starts 2012-05-10 (~3425 rows). Generated output files (`processed_data.parquet`, `*.png`, `*.xlsx`) are tracked in git (removed from `.gitignore` as of 2026-06-13).. The model uses only the `close` column for pricing.
