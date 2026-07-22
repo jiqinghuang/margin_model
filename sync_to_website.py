@@ -61,36 +61,37 @@ def extract_summary_stats(results: dict) -> dict:
     df_au_m2 = results['df_au_m2']
     df_ag_m2 = results['df_ag_m2']
 
-    # Date ranges
-    au_start = df_au.index[0].strftime('%Y-%m-%d')
-    au_end = df_au.index[-1].strftime('%Y-%m-%d')
-    ag_start = df_ag.index[0].strftime('%Y-%m-%d')
-    ag_end = df_ag.index[-1].strftime('%Y-%m-%d')
+    # Date ranges — use the last ACTUAL trading day (close is non-NaN),
+    # not the trailing next-day forecast row appended by data_processor.
+    au_start = df_au['close'].dropna().index[0].strftime('%Y-%m-%d')
+    au_end = df_au['close'].dropna().index[-1].strftime('%Y-%m-%d')
+    ag_start = df_ag['close'].dropna().index[0].strftime('%Y-%m-%d')
+    ag_end = df_ag['close'].dropna().index[-1].strftime('%Y-%m-%d')
 
-    # Total trading days
-    au_days = len(df_au)
-    ag_days = len(df_ag)
+    # Total trading days = number of price observations (excludes forecast row)
+    au_days = int(df_au['close'].notna().sum())
+    ag_days = int(df_ag['close'].notna().sum())
     total_days = au_days + ag_days
 
     # Method 1 stats
     au_m1_bt = int(df_au_m1['breakthrough'].sum())
-    au_m1_days = int(df_au_m1['breakthrough'].notna().sum())
+    au_m1_days = au_days
     au_m1_rate = au_m1_bt / au_m1_days * 100
     au_m1_rolling = int(df_au_m1['250d_breakthroughs'].iloc[-1])
 
     ag_m1_bt = int(df_ag_m1['breakthrough'].sum())
-    ag_m1_days = int(df_ag_m1['breakthrough'].notna().sum())
+    ag_m1_days = ag_days
     ag_m1_rate = ag_m1_bt / ag_m1_days * 100
     ag_m1_rolling = int(df_ag_m1['250d_breakthroughs'].iloc[-1])
 
     # Method 2 stats
     au_m2_bt = int(df_au_m2['breakthrough'].sum())
-    au_m2_days = int(df_au_m2['breakthrough'].notna().sum())
+    au_m2_days = au_days
     au_m2_rate = au_m2_bt / au_m2_days * 100
     au_m2_rolling = int(df_au_m2['250d_breakthroughs'].iloc[-1])
 
     ag_m2_bt = int(df_ag_m2['breakthrough'].sum())
-    ag_m2_days = int(df_ag_m2['breakthrough'].notna().sum())
+    ag_m2_days = ag_days
     ag_m2_rate = ag_m2_bt / ag_m2_days * 100
     ag_m2_rolling = int(df_ag_m2['250d_breakthroughs'].iloc[-1])
 
