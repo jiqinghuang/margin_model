@@ -1,6 +1,9 @@
 import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
+
+_BASE_DIR = Path(__file__).resolve().parent
 from scipy import stats
 def load_parquet_data(filepath: str) -> pd.DataFrame:
     """Load Wind futures index parquet data, set date as index."""
@@ -121,14 +124,14 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
 
     # Process Au
     print('\n--- Processing Au (AUFI_WI.parquet) ---')
-    df_au = process_data('AUFI_WI.parquet', 'Au', decay_factor, k, alpha_list)
+    df_au = process_data(str(_BASE_DIR / 'AUFI_WI.parquet'), 'Au', decay_factor, k, alpha_list)
     print(f'Au data: {df_au.shape[0]} rows, {df_au.index[0].date()} ~ {df_au.index[-1].date()}')
     print('Latest Au values (%):')
     print(_latest_pct(df_au, 'Au').to_string())
 
     # Process Ag
     print('\n--- Processing Ag (AGFI_WI.parquet) ---')
-    df_ag = process_data('AGFI_WI.parquet', 'Ag', decay_factor, k, alpha_list)
+    df_ag = process_data(str(_BASE_DIR / 'AGFI_WI.parquet'), 'Ag', decay_factor, k, alpha_list)
     print(f'Ag data: {df_ag.shape[0]} rows, {df_ag.index[0].date()} ~ {df_ag.index[-1].date()}')
     print('Latest Ag values (%):')
     print(_latest_pct(df_ag, 'Ag').to_string())
@@ -136,8 +139,12 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
     # Save
     result = {'Au': df_au, 'Ag': df_ag}
     combined = pd.concat([df_au.assign(metal='Au'), df_ag.assign(metal='Ag')])
-    combined.to_parquet(output_path)
-    print(f'\nProcessed data saved to {output_path}')
+    # resolve output_path relative to module dir if not absolute
+    _out = Path(output_path)
+    if not _out.is_absolute():
+        _out = _BASE_DIR / _out
+    combined.to_parquet(_out)
+    print(f'\nProcessed data saved to {_out}')
 
     return df_au, df_ag
 

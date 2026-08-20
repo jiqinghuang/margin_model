@@ -1,5 +1,8 @@
+from pathlib import Path
 import numpy as np
 import pandas as pd
+
+_BASE_DIR = Path(__file__).resolve().parent
 from scipy import stats
 import matplotlib
 matplotlib.use('Agg')
@@ -114,7 +117,7 @@ def plot_backtest(df_au: pd.DataFrame, df_ag: pd.DataFrame,
         ax.legend(['|Return|'] + var_labels)
 
         if save:
-            filename = f'output_{metal}.png'
+            filename = str(_BASE_DIR / f'output_{metal}.png')
             fig.savefig(filename, dpi=200, bbox_inches='tight')
             print(f'Plot saved: {filename}')
 
@@ -124,12 +127,15 @@ def plot_backtest(df_au: pd.DataFrame, df_ag: pd.DataFrame,
 def export_backtest_results(df_au: pd.DataFrame, df_ag: pd.DataFrame,
                             filepath: str = 'backtest_results.xlsx') -> None:
     """Export backtest results to Excel."""
-    with pd.ExcelWriter(filepath) as writer:
+    _fp = Path(filepath)
+    if not _fp.is_absolute():
+        _fp = _BASE_DIR / _fp
+    with pd.ExcelWriter(_fp) as writer:
         for df, sheet in [(df_au, 'Au'), (df_ag, 'Ag')]:
             out = df.copy()
             out['Year'] = out.index.year
             out.to_excel(writer, sheet_name=sheet)
-    print(f'Backtest results exported to {filepath}')
+    print(f'Backtest results exported to {_fp}')
 
 
 def run_backtest(df_au: pd.DataFrame, df_ag: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:

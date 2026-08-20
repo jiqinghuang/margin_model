@@ -12,7 +12,10 @@ Output:
   - backtest_results.xlsx
 """
 
+from pathlib import Path
 import sys
+
+_BASE_DIR = Path(__file__).resolve().parent
 
 DECAY_FACTOR = 0.98
 TOLERANCE_LEVEL = 0.01
@@ -33,7 +36,7 @@ def main():
     df_au, df_ag = run_data_processor(
         decay_factor=DECAY_FACTOR,
         tolerance_level=TOLERANCE_LEVEL,
-        output_path='processed_data.parquet'
+        output_path=str(_BASE_DIR / 'processed_data.parquet')
     )
 
     print('\n>>> Step 2/3: Stress Testing')

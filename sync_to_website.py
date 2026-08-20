@@ -21,8 +21,8 @@ import pandas as pd
 from scipy import stats
 
 # Paths
-MARGIN_MODEL_DIR = Path(__file__).parent
-GITHUB_PAGES_DIR = Path(r"C:\Users\Jiqing\Desktop\jiqinghuang.github.io")
+MARGIN_MODEL_DIR = Path(__file__).resolve().parent
+GITHUB_PAGES_DIR = MARGIN_MODEL_DIR.parent / "jiqinghuang.github.io"
 HTML_FILE = GITHUB_PAGES_DIR / "project-margin-model.html"
 PLOTS_DIR = GITHUB_PAGES_DIR / "assets" / "plots"
 

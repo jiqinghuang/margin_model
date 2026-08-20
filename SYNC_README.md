@@ -5,7 +5,7 @@
 每次更新数据后，只需运行一个命令即可同步到个人网站：
 
 ```bash
-cd C:\Users\Jiqing\Desktop\margin_model
+cd C:\Users\Jiqing\Desktop\repo\margin_model
 python sync_to_website.py
 ```
 
@@ -45,8 +45,8 @@ python sync_to_website.py
 
 ## 文件路径
 
-- **保证金模型目录**: `C:\Users\Jiqing\Desktop\margin_model`
-- **个人网站目录**: `C:\Users\Jiqing\Desktop\jiqinghuang.github.io`
+- **保证金模型目录**: `C:\Users\Jiqing\Desktop\repo\margin_model`
+- **个人网站目录**: `C:\Users\Jiqing\Desktop\repo\jiqinghuang.github.io`
 - **HTML文件**: `jiqinghuang.github.io\project-margin-model.html`
 - **图表目录**: `jiqinghuang.github.io\assets\plots\`
 
@@ -65,7 +65,7 @@ python sync_to_website.py
    - 更新HTML
         ↓
 4. 提交并推送到GitHub
-   cd C:\Users\Jiqing\Desktop\jiqinghuang.github.io
+   cd C:\Users\Jiqing\Desktop\repo\jiqinghuang.github.io
    git add .
    git commit -m "Update margin model data"
    git push
