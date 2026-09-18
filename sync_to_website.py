@@ -8,23 +8,32 @@ This script:
 4. Updates the HTML file with new data values
 """
 
-import os
 import re
 import shutil
-import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-from scipy import stats
+try:
+    from PIL import Image
+except ImportError:  # Pillow 缺失时跳过 webp 转换与尺寸更新，PNG 同步不受影响
+    Image = None
 
 # Paths
 MARGIN_MODEL_DIR = Path(__file__).resolve().parent
 GITHUB_PAGES_DIR = MARGIN_MODEL_DIR.parent / "jiqinghuang.github.io"
 HTML_FILE = GITHUB_PAGES_DIR / "project-margin-model.html"
 PLOTS_DIR = GITHUB_PAGES_DIR / "assets" / "plots"
+
+
+def _sub_expect(pattern, repl, html, label):
+    """执行一处正则替换并校验恰好匹配一次；否则说明页面结构已变化，
+    静默跳过会导致网站数字停在旧值，这里直接报错终止同步。"""
+    html, n = re.subn(pattern, repl, html)
+    if n != 1:
+        raise ValueError(
+            f"网站页面结构可能已变化：{label} 预期匹配 1 处，实际 {n} 处"
+        )
+    return html
 
 
 def run_margin_model():
@@ -73,25 +82,29 @@ def extract_summary_stats(results: dict) -> dict:
     ag_days = int(df_ag['close'].notna().sum())
     total_days = au_days + ag_days
 
-    # Method 1 stats
+    # Method 1 stats — 分母用 VaR 有效覆盖的交易日（排除 EWMA 预热期）
+    au_m1_valid = int((df_au_m1['99.0% VaR'].notna() & df_au_m1['r_Au'].notna()).sum())
     au_m1_bt = int(df_au_m1['breakthrough'].sum())
-    au_m1_days = au_days
+    au_m1_days = au_m1_valid
     au_m1_rate = au_m1_bt / au_m1_days * 100
     au_m1_rolling = int(df_au_m1['250d_breakthroughs'].iloc[-1])
 
+    ag_m1_valid = int((df_ag_m1['99.0% VaR'].notna() & df_ag_m1['r_Ag'].notna()).sum())
     ag_m1_bt = int(df_ag_m1['breakthrough'].sum())
-    ag_m1_days = ag_days
+    ag_m1_days = ag_m1_valid
     ag_m1_rate = ag_m1_bt / ag_m1_days * 100
     ag_m1_rolling = int(df_ag_m1['250d_breakthroughs'].iloc[-1])
 
-    # Method 2 stats
+    # Method 2 stats — 同样排除预热期
+    au_m2_valid = int((df_au_m2['99.0% VaR'].notna() & df_au_m2['r_Au'].notna()).sum())
     au_m2_bt = int(df_au_m2['breakthrough'].sum())
-    au_m2_days = au_days
+    au_m2_days = au_m2_valid
     au_m2_rate = au_m2_bt / au_m2_days * 100
     au_m2_rolling = int(df_au_m2['250d_breakthroughs'].iloc[-1])
 
+    ag_m2_valid = int((df_ag_m2['99.0% VaR'].notna() & df_ag_m2['r_Ag'].notna()).sum())
     ag_m2_bt = int(df_ag_m2['breakthrough'].sum())
-    ag_m2_days = ag_days
+    ag_m2_days = ag_m2_valid
     ag_m2_rate = ag_m2_bt / ag_m2_days * 100
     ag_m2_rolling = int(df_ag_m2['250d_breakthroughs'].iloc[-1])
 
@@ -123,23 +136,60 @@ def extract_summary_stats(results: dict) -> dict:
 
 
 def copy_plots():
-    """Copy plot images from margin model to GitHub Pages."""
+    """Copy plot images from margin model to GitHub Pages.
+
+    网站用 <picture> 且 webp 优先，因此这里同步生成 webp；
+    只更新 PNG 会让支持 webp 的浏览器继续显示旧图。
+    """
     print("\nCopying plot images...")
 
     # Ensure target directory exists
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Copy files
-    src_au = MARGIN_MODEL_DIR / "output_Au.png"
-    src_ag = MARGIN_MODEL_DIR / "output_Ag.png"
-    dst_au = PLOTS_DIR / "margin_model_Au.png"
-    dst_ag = PLOTS_DIR / "margin_model_Ag.png"
+    sizes = {}
+    pairs = [
+        (MARGIN_MODEL_DIR / "output_Au.png", PLOTS_DIR / "margin_model_Au.png"),
+        (MARGIN_MODEL_DIR / "output_Ag.png", PLOTS_DIR / "margin_model_Ag.png"),
+    ]
+    for src, dst in pairs:
+        shutil.copy2(src, dst)
+        print(f"  Copied: {dst}")
+        size = None
+        if Image is not None:
+            try:
+                with Image.open(dst) as img:
+                    size = img.size  # (width, height)
+                    webp_dst = dst.with_suffix(".webp")
+                    img.save(webp_dst, "WEBP", quality=90)
+                    print(f"  Copied: {webp_dst}")
+            except (OSError, ValueError) as exc:
+                print(f"  警告: webp 转换失败 {dst.name}: {exc}")
+        sizes[dst.stem] = size
+    if Image is None:
+        print("  警告: 未安装 Pillow，已跳过 webp 转换——网站 webp 图表不会更新！")
+    return sizes
 
-    shutil.copy2(src_au, dst_au)
-    shutil.copy2(src_ag, dst_ag)
 
-    print(f"  Copied: {dst_au}")
-    print(f"  Copied: {dst_ag}")
+def update_img_dimensions(sizes):
+    """按实际 PNG 尺寸更新网站 <img> 的 width/height（最佳努力，不阻断同步）。"""
+    if Image is None:
+        return
+    html = HTML_FILE.read_text(encoding="utf-8")
+    patched = 0
+    for name, size in sizes.items():
+        if size is None:
+            continue
+        width, height = size
+        html, n = re.subn(
+            r'(<img src="assets/plots/' + re.escape(name) + r'\.png"[^>]*'
+            r'width=")\d+(" height=")\d+(")',
+            rf"\g<1>{width}\g<2>{height}\g<3>",
+            html,
+            count=1,
+        )
+        patched += n
+    HTML_FILE.write_text(html, encoding="utf-8")
+    print(f"  图片尺寸已核对（更新 {patched}/{len(sizes)} 张）")
 
 
 def update_html(stats: dict):
@@ -150,37 +200,38 @@ def update_html(stats: dict):
     html_content = HTML_FILE.read_text(encoding='utf-8')
 
     # Update total trading days
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<div class="stat-number">~[\d,]+</div>',
         f'<div class="stat-number">~{stats["total_days"]:,}</div>',
-        html_content
+        html_content,
+        "交易天数统计",
     )
 
     # Update date ranges in captions
     # Au date range
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<span data-lang="cn">黄金 \(Au\) — [\d-]+ ~ [\d-]+</span>'
         r'<span data-lang="en">Gold \(Au\) — [\d-]+ ~ [\d-]+</span>',
         f'<span data-lang="cn">黄金 (Au) — {stats["au_start"]} ~ {stats["au_end"]}</span>'
         f'<span data-lang="en">Gold (Au) — {stats["au_start"]} ~ {stats["au_end"]}</span>',
-        html_content
+        html_content,
+        "Au 日期范围",
     )
 
     # Ag date range
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<span data-lang="cn">白银 \(Ag\) — [\d-]+ ~ [\d-]+</span>'
         r'<span data-lang="en">Silver \(Ag\) — [\d-]+ ~ [\d-]+</span>',
         f'<span data-lang="cn">白银 (Ag) — {stats["ag_start"]} ~ {stats["ag_end"]}</span>'
         f'<span data-lang="en">Silver (Ag) — {stats["ag_start"]} ~ {stats["ag_end"]}</span>',
-        html_content
+        html_content,
+        "Ag 日期范围",
     )
 
-    # Update backtest results table
-    # This is more complex - we need to find and replace specific table rows
-    # Using a more targeted approach with the actual values
+    # Update backtest results table row by row
 
     # Au Method 1
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<td><strong>Au</strong></td>\s*'
         r'<td><span data-lang="cn">方法一（含阈值）</span><span data-lang="en">Method 1 \(w/ threshold\)</span></td>\s*'
         r'<td>\d+</td>\s*'
@@ -193,11 +244,12 @@ def update_html(stats: dict):
         f'              <td>{stats["au_m1_days"]:,}</td>\n'
         f'              <td>{stats["au_m1_rate"]:.2f}%</td>\n'
         f'              <td>{stats["au_m1_rolling"]}</td>',
-        html_content
+        html_content,
+        "Au 方法一表格行",
     )
 
     # Au Method 2
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<td><strong>Au</strong></td>\s*'
         r'<td><span data-lang="cn">方法二（η=1\.8）</span><span data-lang="en">Method 2 \(η=1\.8\)</span></td>\s*'
         r'<td>\d+</td>\s*'
@@ -210,11 +262,12 @@ def update_html(stats: dict):
         f'              <td>{stats["au_m2_days"]:,}</td>\n'
         f'              <td>{stats["au_m2_rate"]:.2f}%</td>\n'
         f'              <td>{stats["au_m2_rolling"]}</td>',
-        html_content
+        html_content,
+        "Au 方法二表格行",
     )
 
     # Ag Method 1
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<td><strong>Ag</strong></td>\s*'
         r'<td><span data-lang="cn">方法一（含阈值）</span><span data-lang="en">Method 1 \(w/ threshold\)</span></td>\s*'
         r'<td>\d+</td>\s*'
@@ -227,11 +280,12 @@ def update_html(stats: dict):
         f'              <td>{stats["ag_m1_days"]:,}</td>\n'
         f'              <td>{stats["ag_m1_rate"]:.2f}%</td>\n'
         f'              <td>{stats["ag_m1_rolling"]}</td>',
-        html_content
+        html_content,
+        "Ag 方法一表格行",
     )
 
     # Ag Method 2
-    html_content = re.sub(
+    html_content = _sub_expect(
         r'<td><strong>Ag</strong></td>\s*'
         r'<td><span data-lang="cn">方法二（η=1\.8）</span><span data-lang="en">Method 2 \(η=1\.8\)</span></td>\s*'
         r'<td>\d+</td>\s*'
@@ -244,7 +298,8 @@ def update_html(stats: dict):
         f'              <td>{stats["ag_m2_days"]:,}</td>\n'
         f'              <td>{stats["ag_m2_rate"]:.2f}%</td>\n'
         f'              <td>{stats["ag_m2_rolling"]}</td>',
-        html_content
+        html_content,
+        "Ag 方法二表格行",
     )
 
     # Write updated HTML
@@ -293,11 +348,12 @@ def main():
     # Extract stats
     stats = extract_summary_stats(results)
 
-    # Copy plots
-    copy_plots()
+    # Copy plots (incl. webp)
+    sizes = copy_plots()
 
     # Update HTML
     update_html(stats)
+    update_img_dimensions(sizes)
 
     # Print summary
     print_summary(stats)

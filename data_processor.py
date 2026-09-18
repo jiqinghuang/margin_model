@@ -1,15 +1,42 @@
-import os
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 _BASE_DIR = Path(__file__).resolve().parent
-from scipy import stats
+
+# 数据来源：margin_model 与 trading_strategy 各持有一份 Wind parquet。
+# 两者截止日期一致时用本地副本；trading_strategy 的更新（其 excel_to_parquet
+# 管道负责日常更新）时自动改用那份，避免本地副本过期造成网站数字倒退。
+_SIBLING_DATA_DIR = _BASE_DIR.parent / 'trading_strategy' / 'data'
+
+
+def _parquet_last_date(path: Path):
+    df = pd.read_parquet(path, columns=['date'])
+    return pd.to_datetime(df['date']).max()
+
+
+def resolve_data_path(filename: str) -> Path:
+    """返回截止日期更新的数据文件路径（平局用本地）。"""
+    local = _BASE_DIR / filename
+    sibling = _SIBLING_DATA_DIR / filename
+    if not sibling.exists():
+        return local
+    if not local.exists():
+        return sibling
+    chosen = sibling if _parquet_last_date(sibling) > _parquet_last_date(local) else local
+    if chosen == sibling:
+        print(f'{filename}: 使用 trading_strategy/data 的更新副本 (截止 {_parquet_last_date(sibling).date()})')
+    return chosen
+
+
 def load_parquet_data(filepath: str) -> pd.DataFrame:
     """Load Wind futures index parquet data, set date as index."""
-    if not os.path.exists(filepath):
+    _path = Path(filepath)
+    if not _path.exists():
         raise FileNotFoundError(f'Data file not found: {filepath}')
-    df = pd.read_parquet(filepath)
+    df = pd.read_parquet(_path)
     if df.empty:
         raise ValueError(f'Data file is empty: {filepath}')
     required = {'date', 'close'}
@@ -123,15 +150,17 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
         return df[cols].tail(5) * 100
 
     # Process Au
+    au_path = resolve_data_path('AUFI_WI.parquet')
     print('\n--- Processing Au (AUFI_WI.parquet) ---')
-    df_au = process_data(str(_BASE_DIR / 'AUFI_WI.parquet'), 'Au', decay_factor, k, alpha_list)
+    df_au = process_data(str(au_path), 'Au', decay_factor, k, alpha_list)
     print(f'Au data: {df_au.shape[0]} rows, {df_au.index[0].date()} ~ {df_au.index[-1].date()}')
     print('Latest Au values (%):')
     print(_latest_pct(df_au, 'Au').to_string())
 
     # Process Ag
+    ag_path = resolve_data_path('AGFI_WI.parquet')
     print('\n--- Processing Ag (AGFI_WI.parquet) ---')
-    df_ag = process_data(str(_BASE_DIR / 'AGFI_WI.parquet'), 'Ag', decay_factor, k, alpha_list)
+    df_ag = process_data(str(ag_path), 'Ag', decay_factor, k, alpha_list)
     print(f'Ag data: {df_ag.shape[0]} rows, {df_ag.index[0].date()} ~ {df_ag.index[-1].date()}')
     print('Latest Ag values (%):')
     print(_latest_pct(df_ag, 'Ag').to_string())

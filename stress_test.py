@@ -32,9 +32,10 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
                 raise ValueError(f'{name} DataFrame missing column: {col}')
 
     if df_au.index[-1] != df_ag.index[-1]:
-        raise ValueError(
-            f'Date mismatch: Au last date={df_au.index[-1].date()}, '
-            f'Ag last date={df_ag.index[-1].date()}'
+        print(
+            f'警告: Au 最后交易日={df_au.index[-1].date()}, '
+            f'Ag 最后交易日={df_ag.index[-1].date()}，两者不一致；'
+            '各自使用自身最新数据继续。'
         )
 
     # --- Parameters ---
@@ -46,17 +47,19 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
 
     today_date = df_au.index[-1]
     yesterday_date = df_au.index[-2]
+    ag_today_date = df_ag.index[-1]
+    ag_yesterday_date = df_ag.index[-2]
 
-    print(f'Previous trading day: {yesterday_date.date()}')
-    print(f'Current date (latest data): {today_date.date()}')
+    print(f'Previous trading day: Au {yesterday_date.date()} / Ag {ag_yesterday_date.date()}')
+    print(f'Current date (latest data): Au {today_date.date()} / Ag {ag_today_date.date()}')
     print()
 
     au_r = df_au.loc[yesterday_date, 'r_Au'] * 100
     au_r_log = df_au.loc[yesterday_date, 'r_Au_log'] * 100
     au_std = df_au.loc[today_date, 'std_log'] * 100
-    ag_r = df_ag.loc[yesterday_date, 'r_Ag'] * 100
-    ag_r_log = df_ag.loc[yesterday_date, 'r_Ag_log'] * 100
-    ag_std = df_ag.loc[today_date, 'std_log'] * 100
+    ag_r = df_ag.loc[ag_yesterday_date, 'r_Ag'] * 100
+    ag_r_log = df_ag.loc[ag_yesterday_date, 'r_Ag_log'] * 100
+    ag_std = df_ag.loc[ag_today_date, 'std_log'] * 100
 
     print(f'Previous day Au return: {au_r:.3f}%')
     print(f'Previous day Au log return: {au_r_log:.3f}%')
@@ -64,7 +67,7 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
     print('-' * 50)
     print(f'Previous day Ag return: {ag_r:.3f}%')
     print(f'Previous day Ag log return: {ag_r_log:.3f}%')
-    print(f'Forecast Ag volatility (std_log) for {today_date.date()}: {ag_std:.3f}%')
+    print(f'Forecast Ag volatility (std_log) for {ag_today_date.date()}: {ag_std:.3f}%')
     print()
 
     # ========== Part 1: N-day Forward VaR ==========
@@ -73,7 +76,7 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
     print('=' * 70)
 
     au_std_today = df_au.loc[today_date, 'std_log']
-    ag_std_today = df_ag.loc[today_date, 'std_log']
+    ag_std_today = df_ag.loc[ag_today_date, 'std_log']
 
     output_au = pd.DataFrame(columns=['std_log'] + var_names)
     output_ag = pd.DataFrame(columns=['std_log'] + var_names)
@@ -153,7 +156,44 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
     }
 
 
+def export_stress_results(results: dict, filepath: str = 'stress_test_results.xlsx') -> None:
+    """将三部分压力测试结果导出到 Excel（part3 汇总为长表）。
+
+    Returns
+    -------
+    Path to the exported file.
+    """
+    from pathlib import Path
+
+    out_dir = Path(__file__).resolve().parent
+    _fp = Path(filepath)
+    if not _fp.is_absolute():
+        _fp = out_dir / _fp
+
+    frames = {
+        'part1_Au': results['part1']['Au'],
+        'part1_Ag': results['part1']['Ag'],
+        'part2_Au': results['part2']['Au'],
+        'part2_Ag': results['part2']['Ag'],
+    }
+
+    # part3: {metal: {f'{h}_days': DataFrame}} → 长表（metal, horizon, shock, std, VaR...）
+    part3_rows = []
+    for metal, by_horizon in results['part3'].items():
+        for horizon, table in by_horizon.items():
+            for shock, row in table.iterrows():
+                part3_rows.append({'metal': metal, 'horizon': horizon, 'shock': shock, **row.to_dict()})
+    frames['part3_shocks'] = pd.DataFrame(part3_rows)
+
+    with pd.ExcelWriter(_fp) as writer:
+        for sheet, table in frames.items():
+            table.to_excel(writer, sheet_name=sheet[:31])
+    print(f'\nStress test results exported to {_fp}')
+    return _fp
+
+
 if __name__ == '__main__':
     from data_processor import run_data_processor
     df_au, df_ag = run_data_processor()
-    run_stress_test(df_au, df_ag)
+    _results = run_stress_test(df_au, df_ag)
+    export_stress_results(_results)

@@ -35,13 +35,16 @@ def backtest_method1(df_au: pd.DataFrame, df_ag: pd.DataFrame,
         df['breakthrough'] = (df['abs_return'] > df['99.0% VaR']) & (df['abs_return'] >= threshold)
         df['250d_breakthroughs'] = df['breakthrough'].rolling(window=250).sum()
 
-        total_bt = df['breakthrough'].sum()
-        total_days = df['breakthrough'].notna().sum()
+        # 分母只统计"VaR 有效且有已实现收益"的交易日：EWMA 预热期（前 k 行）的
+        # VaR 为 NaN，末尾预测行无已实现收益，都构造上不可能突破。
+        valid = df['99.0% VaR'].notna() & df[r_col].notna()
+        total_bt = int(df.loc[valid, 'breakthrough'].sum())
+        total_days = int(valid.sum())
         last_val = df['250d_breakthroughs'].iloc[-1]
         recent_bt = last_val if pd.notna(last_val) else np.nan
 
         print(f'\n{metal}:')
-        print(f'  Total breakthroughs: {int(total_bt)} / {total_days} trading days')
+        print(f'  Total breakthroughs: {total_bt} / {total_days} trading days (VaR covered)')
         print(f'  Breakthrough rate: {total_bt/total_days*100:.2f}%')
         print(f'  250-day rolling breakthroughs (latest): {recent_bt:.0f}')
 
@@ -78,8 +81,10 @@ def backtest_method2(df_au: pd.DataFrame, df_ag: pd.DataFrame, eta: float = 1.8)
         df['breakthrough'] = df['abs_return'] > df['99.0% VaR']
         df['250d_breakthroughs'] = df['breakthrough'].rolling(window=250).sum()
 
-        total_bt = df['breakthrough'].sum()
-        total_days = df['breakthrough'].notna().sum()
+        # 同方法一：分母排除 EWMA 预热期
+        valid = df['99.0% VaR'].notna()
+        total_bt = int(df.loc[valid, 'breakthrough'].sum())
+        total_days = int(valid.sum())
         last_val = df['250d_breakthroughs'].iloc[-1]
         recent_bt = last_val if pd.notna(last_val) else np.nan
         expected_bt = total_days * 0.01  # At 99% VaR, expect ~1% of days to break through

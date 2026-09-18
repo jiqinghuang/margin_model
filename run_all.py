@@ -41,8 +41,9 @@ def main():
 
     print('\n>>> Step 2/3: Stress Testing')
     print('-' * 55)
-    from stress_test import run_stress_test
-    run_stress_test(df_au, df_ag, decay_factor=DECAY_FACTOR)
+    from stress_test import run_stress_test, export_stress_results
+    stress_results = run_stress_test(df_au, df_ag, decay_factor=DECAY_FACTOR)
+    export_stress_results(stress_results, str(_BASE_DIR / 'stress_test_results.xlsx'))
 
     print('\n>>> Step 3/3: Backtesting')
     print('-' * 55)
@@ -55,6 +56,7 @@ def main():
     print('    - processed_data.parquet')
     print('    - output_Au.png')
     print('    - output_Ag.png')
+    print('    - stress_test_results.xlsx')
     print('    - backtest_results.xlsx')
     print('=' * 70)
 

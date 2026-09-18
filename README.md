@@ -1,6 +1,6 @@
 # 保证金模型 — 黄金 & 白银 Wind 期货指数
 
-> 最后更新: 2026-07-22
+> 最后更新: 2026-09-18
 
 基于 EWMA 波动率和 VaR 方法的三阶段保证金计算模型，覆盖黄金 (Au) 和白银 (Ag) Wind 期货指数数据。
 
@@ -51,8 +51,15 @@ AGFI_WI.parquet ──┘                                                   └�
 ## 快速开始
 
 ```bash
-pip install numpy pandas scipy matplotlib openpyxl
+pip install numpy pandas scipy matplotlib openpyxl pyarrow
 python run_all.py
+
+# 单元测试
+python -m unittest -v test_model
+
+# 网站同步（另需 Pillow + 本地存在 jiqinghuang.github.io 仓库）
+pip install pillow
+python sync_to_website.py
 ```
 
 ## 输出文件
@@ -62,28 +69,43 @@ python run_all.py
 | `processed_data.parquet` | 包含收益率、波动率、VaR 列的处理后数据 |
 | `output_Au.png` | 黄金回测图 |
 | `output_Ag.png` | 白银回测图 |
+| `stress_test_results.xlsx` | 压力测试三部分结果（N 日远期 VaR、手动波动率、价格冲击） |
 | `backtest_results.xlsx` | 回测结果（两种方法） |
+
+## 测试
+
+```bash
+python -m unittest -v test_model
+```
+
+覆盖：EWMA 递推公式、无前视（末笔收益冲击只影响预测行）、双尾 z 值、
+预测行追加、数据源选择逻辑、突破计数的预热期不变量。
+
+仓库配有 GitHub Actions（`.github/workflows/ci.yml`）：每次 push 自动运行本测试。
 
 ## 数据
 
 Wind 商品期货指数日线数据，包含列：`date`, `open`, `high`, `low`, `close`, `settle`, `volume`, `oi`, `amt`。模型仅使用 `close` 列进行定价。
 
-- Au：2008-01-09 ~ 2026-07-22（4,503 行）
-- Ag：2012-05-10 ~ 2026-07-22（3,451 行）
+- Au：2008-01-09 ~ 2026-09-18（4,545 行）
+- Ag：2012-05-10 ~ 2026-09-18（3,493 行）
 
 > **数据行数说明**：上述行数为原始 parquet 中的交易日数。`data_processor` 会在序列末尾额外追加一行「下一交易日波动率预测」（index = 末日 + 1 天），因此模型内部 `len(df)` 会比上数多 1；`stress_test` 故意把该行当作「今日/预测日」使用。网站同步脚本（`sync_to_website.py`）取结束日与交易日数时以 `close` 非 NaN 的真实交易日为准。
+>
+> **数据源选择**：`data_processor.resolve_data_path` 会对比本目录与 `../trading_strategy/data/` 下同名 parquet 的截止日期，**自动选用更新的那份**（每日数据由 trading_strategy 的 `excel_to_parquet` 管道负责增量更新）。两者一致时用本地副本，因此本仓库单独克隆也能跑。
 
-## 当前状态（2026-07-22 运行）
+## 当前状态（2026-09-18 运行，数据源 trading_strategy/data）
 
-最新一次完整管道运行结果：
+最新一次完整管道运行结果。突破率分母为「VaR 有效且有已实现收益」的交易日
+（排除 EWMA 预热期与末尾预测行）：
 
 | 指标 | Au（黄金） | Ag（白银） |
 |------|-----------|-----------|
-| 数据区间 | 2008-01-09 ~ 2026-07-22 | 2012-05-10 ~ 2026-07-22 |
-| 交易日数 | 4,503 | 3,451 |
-| 方法一突破数（含阈值） | 87（1.93%） | 57（1.65%） |
-| 方法一 250 日滚动（最新） | 8 | 10 |
-| 方法二突破数（η=1.8） | 39（0.87%） | 27（0.78%） |
+| 数据区间 | 2008-01-09 ~ 2026-09-18 | 2012-05-10 ~ 2026-09-18 |
+| VaR 覆盖交易日数 | 4,316 | 3,264 |
+| 方法一突破数（含阈值） | 87（2.02%） | 57（1.75%） |
+| 方法一 250 日滚动（最新） | 8 | 9 |
+| 方法二突破数（η=1.8） | 39（0.90%） | 27（0.83%） |
 | 方法二 250 日滚动（最新） | 5 | 1 |
 
 详细解释与图表见 [个人网站](https://jiqinghuang.github.io/project-margin-model.html)。
@@ -98,10 +120,11 @@ python sync_to_website.py
 
 自动化流程：
 1. 运行完整模型管道（data_processor → backtest）
-2. 将 `output_Au.png` / `output_Ag.png` 复制到网站的 `assets/plots/` 目录
-3. 更新 HTML 页面中的统计数据、日期范围和回测结果表格
+2. 将 `output_Au.png` / `output_Ag.png` 复制到网站的 `assets/plots/` 目录，**并同步生成 webp**（网站 `<picture>` 以 webp 优先，只更新 PNG 会让浏览器继续显示旧图）
+3. 更新 HTML 页面中的统计数据、日期范围和回测结果表格——所有替换**校验恰好匹配一处**，页面结构变化时会报错终止而不是静默跳过
+4. 按实际图片尺寸更新页面 `<img>` 的 `width`/`height`
 
-需要本地存在 `jiqinghuang.github.io` 仓库。详细说明见 `SYNC_README.md`。
+需要本地存在 `jiqinghuang.github.io` 仓库和 Pillow（`pip install pillow`，缺失时跳过 webp）。详细说明见 `SYNC_README.md`。
 
 ## 参数
 
