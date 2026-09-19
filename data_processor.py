@@ -11,6 +11,24 @@ _BASE_DIR = Path(__file__).resolve().parent
 # 管道负责日常更新）时自动改用那份，避免本地副本过期造成网站数字倒退。
 _SIBLING_DATA_DIR = _BASE_DIR.parent / 'trading_strategy' / 'data'
 
+# ---- VaR 参数（单一数据源；backtest/stress_test/run_all/sync 均从这里导入）----
+
+ALPHA_LIST = np.array([0.01, 0.003, 0.0001])  # 99%, 99.7%, 99.99% 置信水平
+
+
+def var_column_names(alpha_list=ALPHA_LIST):
+    """alpha 对应的 VaR 列名（与 process_data 输出列一致）。"""
+    return [f'{round((1 - alpha) * 100, 4)}% VaR' for alpha in alpha_list]
+
+
+def two_tailed_z_scores(alpha_list=ALPHA_LIST):
+    """双尾 z 分数 z_{α/2}，比单尾更保守（99% 下 2.576 vs 2.326）。"""
+    return stats.norm.ppf(1 - alpha_list / 2)
+
+
+# 回测/同步中最常用的 99% VaR 列名
+VAR_99_COL = var_column_names()[0]
+
 
 def _parquet_last_date(path: Path):
     df = pd.read_parquet(path, columns=['date'])
@@ -25,10 +43,12 @@ def resolve_data_path(filename: str) -> Path:
         return local
     if not local.exists():
         return sibling
-    chosen = sibling if _parquet_last_date(sibling) > _parquet_last_date(local) else local
-    if chosen == sibling:
-        print(f'{filename}: 使用 trading_strategy/data 的更新副本 (截止 {_parquet_last_date(sibling).date()})')
-    return chosen
+    local_date = _parquet_last_date(local)
+    sibling_date = _parquet_last_date(sibling)
+    if sibling_date > local_date:
+        print(f'{filename}: 使用 trading_strategy/data 的更新副本 (截止 {sibling_date.date()})')
+        return sibling
+    return local
 
 
 def load_parquet_data(filepath: str) -> pd.DataFrame:
@@ -115,8 +135,8 @@ def process_data(filepath: str, metal_name: str, decay_factor: float, k: int,
     # VaR under normal log-return assumption: VaR = exp(z · σ) − 1
     # Uses two-tailed z-scores (z_{α/2}), more conservative than one-tailed.
     # Example: at 99% confidence, z = 2.576 (two-tailed) vs z = 2.326 (one-tailed).
-    var_names = [f'{round((1 - alpha) * 100, 4)}% VaR' for alpha in alpha_list]
-    z_scores = stats.norm.ppf(1 - alpha_list / 2)
+    var_names = var_column_names(alpha_list)
+    z_scores = two_tailed_z_scores(alpha_list)
     for z_score, var_name in zip(z_scores, var_names):
         result[var_name] = np.exp(z_score * result['std_log']) - 1
 
@@ -142,10 +162,9 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
     if not (0 < tolerance_level < 1):
         raise ValueError(f'tolerance_level must be in (0, 1), got {tolerance_level}')
     k = int(np.ceil(np.log(tolerance_level) / np.log(decay_factor)))
-    alpha_list = np.array([0.01, 0.003, 0.0001])
 
     print(f'EWMA parameters: decay_factor={decay_factor}, tolerance={tolerance_level}, k={k}')
-    print(f'VaR confidence levels: {[(1 - a) * 100 for a in alpha_list]}')
+    print(f'VaR confidence levels: {[(1 - a) * 100 for a in ALPHA_LIST]}')
 
     def _latest_pct(df, metal):
         """Return tail-5 rows of key columns scaled to percentage."""
@@ -156,7 +175,7 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
     # Process Au
     au_path = resolve_data_path('AUFI_WI.parquet')
     print('\n--- Processing Au (AUFI_WI.parquet) ---')
-    df_au = process_data(str(au_path), 'Au', decay_factor, k, alpha_list)
+    df_au = process_data(str(au_path), 'Au', decay_factor, k, ALPHA_LIST)
     print(f'Au data: {df_au.shape[0]} rows, {df_au.index[0].date()} ~ {df_au.index[-1].date()}')
     print('Latest Au values (%):')
     print(_latest_pct(df_au, 'Au').to_string())
@@ -164,7 +183,7 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
     # Process Ag
     ag_path = resolve_data_path('AGFI_WI.parquet')
     print('\n--- Processing Ag (AGFI_WI.parquet) ---')
-    df_ag = process_data(str(ag_path), 'Ag', decay_factor, k, alpha_list)
+    df_ag = process_data(str(ag_path), 'Ag', decay_factor, k, ALPHA_LIST)
     print(f'Ag data: {df_ag.shape[0]} rows, {df_ag.index[0].date()} ~ {df_ag.index[-1].date()}')
     print('Latest Ag values (%):')
     print(_latest_pct(df_ag, 'Ag').to_string())

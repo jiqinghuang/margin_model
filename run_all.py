@@ -22,13 +22,13 @@ TOLERANCE_LEVEL = 0.01
 
 
 def main():
-    alpha_list = [0.01, 0.003, 0.0001]  # 99%, 99.7%, 99.99% VaR
+    from data_processor import ALPHA_LIST, run_data_processor
 
     print('=' * 70)
     print('  Margin Model - Au (Gold) & Ag (Silver) Wind Futures Index')
     print('=' * 70)
     print(f'\nParameters: decay_factor={DECAY_FACTOR}, tolerance={TOLERANCE_LEVEL}')
-    print(f'VaR levels: {[(1 - a) * 100 for a in alpha_list]}\n')
+    print(f'VaR levels: {[(1 - a) * 100 for a in ALPHA_LIST]}\n')
 
     print('>>> Step 1/3: Data Processing (EWMA volatility + VaR)')
     print('-' * 55)

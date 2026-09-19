@@ -53,7 +53,8 @@ class EwmaTests(unittest.TestCase):
         v = _compute_ewma_variance(r, self.LAMBDA, 5)
         self.assertEqual(len(v), len(r) + 1)
         self.assertEqual(v.index[-1], r.index[-1] + pd.Timedelta('1 days'))
-        self.assertTrue(np.isnan(v.iloc[-1]) is False or not np.isnan(v.iloc[-1]))
+        # 末行是"下一交易日预测"，方差应已算出而非 NaN
+        self.assertFalse(np.isnan(v.iloc[-1]))
 
 
 class VarTests(unittest.TestCase):

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from scipy import stats
+
+from data_processor import two_tailed_z_scores, var_column_names
 
 
 def _forward_var_table(std_today: float, horizons: np.ndarray,
@@ -48,11 +49,9 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
             '各自使用自身最新数据继续。'
         )
 
-    # --- Parameters ---
-    alpha_list = np.array([0.01, 0.003, 0.0001])
-    var_names = [f'{round((1 - alpha) * 100, 4)}% VaR' for alpha in alpha_list]
-    # Two-tailed z-scores (same convention as data_processor)
-    z_scores = stats.norm.ppf(1 - alpha_list / 2)
+    # --- Parameters（VaR 列名与双尾 z 分数统一取自 data_processor）---
+    var_names = var_column_names()
+    z_scores = two_tailed_z_scores()
     horizons = np.array([1, 1.8, 2, 2.8])
 
     today_date = df_au.index[-1]

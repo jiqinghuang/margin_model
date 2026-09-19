@@ -24,6 +24,9 @@ GITHUB_PAGES_DIR = MARGIN_MODEL_DIR.parent / "jiqinghuang.github.io"
 HTML_FILE = GITHUB_PAGES_DIR / "project-margin-model.html"
 PLOTS_DIR = GITHUB_PAGES_DIR / "assets" / "plots"
 
+sys.path.insert(0, str(MARGIN_MODEL_DIR))
+from data_processor import VAR_99_COL  # noqa: E402  (需先确保模块目录在 sys.path)
+
 
 def _sub_expect(pattern, repl, html, label):
     """执行一处正则替换并校验恰好匹配一次；否则说明页面结构已变化，
@@ -42,8 +45,7 @@ def run_margin_model():
     print("Running margin model pipeline...")
     print("=" * 70)
 
-    # Import and run data processor
-    sys.path.insert(0, str(MARGIN_MODEL_DIR))
+    # Import and run data processor（模块加载时已确保 sys.path）
     from data_processor import run_data_processor
     from backtest import run_backtest
 
@@ -63,76 +65,32 @@ def run_margin_model():
 
 def extract_summary_stats(results: dict) -> dict:
     """Extract summary statistics from backtest results."""
-    df_au = results['df_au']
-    df_ag = results['df_ag']
-    df_au_m1 = results['df_au_m1']
-    df_ag_m1 = results['df_ag_m1']
-    df_au_m2 = results['df_au_m2']
-    df_ag_m2 = results['df_ag_m2']
+    stats = {}
 
     # Date ranges — use the last ACTUAL trading day (close is non-NaN),
     # not the trailing next-day forecast row appended by data_processor.
-    au_start = df_au['close'].dropna().index[0].strftime('%Y-%m-%d')
-    au_end = df_au['close'].dropna().index[-1].strftime('%Y-%m-%d')
-    ag_start = df_ag['close'].dropna().index[0].strftime('%Y-%m-%d')
-    ag_end = df_ag['close'].dropna().index[-1].strftime('%Y-%m-%d')
-
     # Total trading days = number of price observations (excludes forecast row)
-    au_days = int(df_au['close'].notna().sum())
-    ag_days = int(df_ag['close'].notna().sum())
-    total_days = au_days + ag_days
+    for lower in ('au', 'ag'):
+        df_raw = results[f'df_{lower}']
+        actual_days = df_raw['close'].dropna().index
+        stats[f'{lower}_start'] = actual_days[0].strftime('%Y-%m-%d')
+        stats[f'{lower}_end'] = actual_days[-1].strftime('%Y-%m-%d')
+        stats[f'{lower}_days'] = int(df_raw['close'].notna().sum())
 
-    # Method 1 stats — 分母用 VaR 有效覆盖的交易日（排除 EWMA 预热期）
-    au_m1_valid = int((df_au_m1['99.0% VaR'].notna() & df_au_m1['r_Au'].notna()).sum())
-    au_m1_bt = int(df_au_m1['breakthrough'].sum())
-    au_m1_days = au_m1_valid
-    au_m1_rate = au_m1_bt / au_m1_days * 100
-    au_m1_rolling = int(df_au_m1['250d_breakthroughs'].iloc[-1])
+    stats['total_days'] = stats['au_days'] + stats['ag_days']
 
-    ag_m1_valid = int((df_ag_m1['99.0% VaR'].notna() & df_ag_m1['r_Ag'].notna()).sum())
-    ag_m1_bt = int(df_ag_m1['breakthrough'].sum())
-    ag_m1_days = ag_m1_valid
-    ag_m1_rate = ag_m1_bt / ag_m1_days * 100
-    ag_m1_rolling = int(df_ag_m1['250d_breakthroughs'].iloc[-1])
+    # Method 1/2 stats — 分母用 VaR 有效覆盖的交易日（排除 EWMA 预热期）
+    for lower, metal in (('au', 'Au'), ('ag', 'Ag')):
+        for key in ('m1', 'm2'):
+            df_m = results[f'df_{lower}_{key}']
+            valid = int((df_m[VAR_99_COL].notna() & df_m[f'r_{metal}'].notna()).sum())
+            bt = int(df_m['breakthrough'].sum())
+            stats[f'{lower}_{key}_bt'] = bt
+            stats[f'{lower}_{key}_days'] = valid
+            stats[f'{lower}_{key}_rate'] = bt / valid * 100
+            stats[f'{lower}_{key}_rolling'] = int(df_m['250d_breakthroughs'].iloc[-1])
 
-    # Method 2 stats — 同样排除预热期
-    au_m2_valid = int((df_au_m2['99.0% VaR'].notna() & df_au_m2['r_Au'].notna()).sum())
-    au_m2_bt = int(df_au_m2['breakthrough'].sum())
-    au_m2_days = au_m2_valid
-    au_m2_rate = au_m2_bt / au_m2_days * 100
-    au_m2_rolling = int(df_au_m2['250d_breakthroughs'].iloc[-1])
-
-    ag_m2_valid = int((df_ag_m2['99.0% VaR'].notna() & df_ag_m2['r_Ag'].notna()).sum())
-    ag_m2_bt = int(df_ag_m2['breakthrough'].sum())
-    ag_m2_days = ag_m2_valid
-    ag_m2_rate = ag_m2_bt / ag_m2_days * 100
-    ag_m2_rolling = int(df_ag_m2['250d_breakthroughs'].iloc[-1])
-
-    return {
-        'au_start': au_start,
-        'au_end': au_end,
-        'ag_start': ag_start,
-        'ag_end': ag_end,
-        'total_days': total_days,
-        'au_days': au_days,
-        'ag_days': ag_days,
-        'au_m1_bt': au_m1_bt,
-        'au_m1_days': au_m1_days,
-        'au_m1_rate': au_m1_rate,
-        'au_m1_rolling': au_m1_rolling,
-        'ag_m1_bt': ag_m1_bt,
-        'ag_m1_days': ag_m1_days,
-        'ag_m1_rate': ag_m1_rate,
-        'ag_m1_rolling': ag_m1_rolling,
-        'au_m2_bt': au_m2_bt,
-        'au_m2_days': au_m2_days,
-        'au_m2_rate': au_m2_rate,
-        'au_m2_rolling': au_m2_rolling,
-        'ag_m2_bt': ag_m2_bt,
-        'ag_m2_days': ag_m2_days,
-        'ag_m2_rate': ag_m2_rate,
-        'ag_m2_rolling': ag_m2_rolling,
-    }
+    return stats
 
 
 def copy_plots():

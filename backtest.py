@@ -2,15 +2,41 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_BASE_DIR = Path(__file__).resolve().parent
-from scipy import stats
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from data_processor import VAR_99_COL, two_tailed_z_scores, var_column_names
+
+_BASE_DIR = Path(__file__).resolve().parent
+
 # Chinese font setup
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
+
+
+def _summarize_breakthroughs(df: pd.DataFrame, metal: str, header: str = '',
+                             show_expected: bool = False) -> pd.DataFrame:
+    """统计 99% VaR 突破并打印摘要；df 需已写入 breakthrough 列。
+
+    分母只统计"VaR 有效且有已实现收益"的交易日：EWMA 预热期（前 k 行）的
+    VaR 为 NaN，末尾预测行无已实现收益，都构造上不可能突破。
+    """
+    r_col = f'r_{metal}'
+    df['250d_breakthroughs'] = df['breakthrough'].rolling(window=250).sum()
+    valid = df[VAR_99_COL].notna() & df[r_col].notna()
+    total_bt = int(df.loc[valid, 'breakthrough'].sum())
+    total_days = int(valid.sum())
+    last_val = df['250d_breakthroughs'].iloc[-1]
+    recent_bt = float(last_val) if pd.notna(last_val) else np.nan
+
+    print(f'\n{metal}{header}:')
+    print(f'  Total breakthroughs: {total_bt} / {total_days} trading days')
+    print(f'  Breakthrough rate: {total_bt / total_days * 100:.2f}%')
+    if show_expected:
+        print(f'  Expected breakthroughs at 99%: ~{total_days * 0.01:.0f}')
+    print(f'  250-day rolling breakthroughs (latest): {recent_bt:.0f}')
+    return df
 
 
 def backtest_method1(df_au: pd.DataFrame, df_ag: pd.DataFrame,
@@ -26,31 +52,13 @@ def backtest_method1(df_au: pd.DataFrame, df_ag: pd.DataFrame,
     print(f'  Au threshold: {au_threshold*100}%  |  Ag threshold: {ag_threshold*100}%')
     print('=' * 70)
 
-    results = {}
+    for metal, df, threshold in [('Au', df_au, au_threshold),
+                                 ('Ag', df_ag, ag_threshold)]:
+        df['abs_return'] = df[f'r_{metal}'].abs()
+        df['breakthrough'] = (df['abs_return'] > df[VAR_99_COL]) & (df['abs_return'] >= threshold)
+        _summarize_breakthroughs(df, metal)
 
-    for metal, df, threshold in [('Au', df_au.copy(), au_threshold),
-                                   ('Ag', df_ag.copy(), ag_threshold)]:
-        r_col = f'r_{metal}'
-        df['abs_return'] = df[r_col].abs()
-        df['breakthrough'] = (df['abs_return'] > df['99.0% VaR']) & (df['abs_return'] >= threshold)
-        df['250d_breakthroughs'] = df['breakthrough'].rolling(window=250).sum()
-
-        # 分母只统计"VaR 有效且有已实现收益"的交易日：EWMA 预热期（前 k 行）的
-        # VaR 为 NaN，末尾预测行无已实现收益，都构造上不可能突破。
-        valid = df['99.0% VaR'].notna() & df[r_col].notna()
-        total_bt = int(df.loc[valid, 'breakthrough'].sum())
-        total_days = int(valid.sum())
-        last_val = df['250d_breakthroughs'].iloc[-1]
-        recent_bt = last_val if pd.notna(last_val) else np.nan
-
-        print(f'\n{metal}:')
-        print(f'  Total breakthroughs: {total_bt} / {total_days} trading days (VaR covered)')
-        print(f'  Breakthrough rate: {total_bt/total_days*100:.2f}%')
-        print(f'  250-day rolling breakthroughs (latest): {recent_bt:.0f}')
-
-        results[metal] = df
-
-    return results['Au'], results['Ag']
+    return df_au, df_ag
 
 
 def backtest_method2(df_au: pd.DataFrame, df_ag: pd.DataFrame, eta: float = 1.8) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -64,46 +72,24 @@ def backtest_method2(df_au: pd.DataFrame, df_ag: pd.DataFrame, eta: float = 1.8)
     print(f'BACKTEST METHOD 2: Volatility Adjustment Factor eta = {eta}')
     print('=' * 70)
 
-    alpha_list = np.array([0.01, 0.003, 0.0001])
-    var_names = [f'{round((1 - alpha) * 100, 4)}% VaR' for alpha in alpha_list]
+    var_names = var_column_names()
+    z_scores = two_tailed_z_scores()
 
-    results = {}
-    for metal, df in [('Au', df_au.copy()), ('Ag', df_ag.copy())]:
-
+    for metal, df in [('Au', df_au), ('Ag', df_ag)]:
         df[f'{eta}_std_log'] = np.sqrt(eta) * df['std_log']
-
-        z_scores = stats.norm.ppf(1 - alpha_list / 2)
         for z_score, var_name in zip(z_scores, var_names):
             df[var_name] = np.exp(z_score * df[f'{eta}_std_log']) - 1
+        df['abs_return'] = df[f'r_{metal}'].abs()
+        df['breakthrough'] = df['abs_return'] > df[VAR_99_COL]
+        _summarize_breakthroughs(df, metal, header=f' (eta={eta})', show_expected=True)
 
-        r_col = f'r_{metal}'
-        df['abs_return'] = df[r_col].abs()
-        df['breakthrough'] = df['abs_return'] > df['99.0% VaR']
-        df['250d_breakthroughs'] = df['breakthrough'].rolling(window=250).sum()
-
-        # 同方法一：分母排除 EWMA 预热期与无已实现收益的预测行
-        valid = df['99.0% VaR'].notna() & df[r_col].notna()
-        total_bt = int(df.loc[valid, 'breakthrough'].sum())
-        total_days = int(valid.sum())
-        last_val = df['250d_breakthroughs'].iloc[-1]
-        recent_bt = last_val if pd.notna(last_val) else np.nan
-        expected_bt = total_days * 0.01  # At 99% VaR, expect ~1% of days to break through
-
-        print(f'\n{metal} (eta={eta}):')
-        print(f'  Total breakthroughs: {int(total_bt)} / {total_days} trading days')
-        print(f'  Breakthrough rate: {total_bt/total_days*100:.2f}%')
-        print(f'  Expected breakthroughs at 99%: ~{expected_bt:.0f}')
-        print(f'  250-day rolling breakthroughs (latest): {recent_bt:.0f}')
-
-        results[metal] = df
-
-    return results['Au'], results['Ag']
+    return df_au, df_ag
 
 
 def plot_backtest(df_au: pd.DataFrame, df_ag: pd.DataFrame,
                   tail_days: int = 1250, save: bool = True) -> None:
     """Plot VaR vs absolute returns — one chart per metal, two VaR levels."""
-    var_cols = ['99.0% VaR', '99.99% VaR']
+    var_cols = [VAR_99_COL, '99.99% VaR']
     var_labels = ['99% VaR', '99.99% VaR']
 
     for df, metal in [(df_au, 'Au'), (df_ag, 'Ag')]:
@@ -149,16 +135,16 @@ def run_backtest(df_au: pd.DataFrame, df_ag: pd.DataFrame) -> tuple[pd.DataFrame
     for name, df in [('Au', df_au), ('Ag', df_ag)]:
         if df.empty:
             raise ValueError(f'{name} DataFrame is empty')
-        required = {f'r_{name}', 'std_log', '99.0% VaR'}
+        required = {f'r_{name}', 'std_log', VAR_99_COL}
         missing = required - set(df.columns)
         if missing:
             raise ValueError(f'{name} DataFrame missing columns: {missing}')
 
     # Method 1
-    df_au_m1, df_ag_m1 = backtest_method1(df_au, df_ag)
+    df_au_m1, df_ag_m1 = backtest_method1(df_au.copy(), df_ag.copy())
 
     # Method 2
-    df_au_m2, df_ag_m2 = backtest_method2(df_au, df_ag)
+    df_au_m2, df_ag_m2 = backtest_method2(df_au.copy(), df_ag.copy())
 
     # Plots using Method 1 results
     plot_backtest(df_au_m1, df_ag_m1)
