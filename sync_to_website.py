@@ -146,7 +146,7 @@ def update_img_dimensions(sizes):
             count=1,
         )
         patched += n
-    HTML_FILE.write_text(html, encoding="utf-8")
+    HTML_FILE.write_text(html, encoding="utf-8", newline="\n")
     print(f"  图片尺寸已核对（更新 {patched}/{len(sizes)} 张）")
 
 
@@ -206,7 +206,7 @@ def update_html(stats: dict):
             )
 
     # Write updated HTML
-    HTML_FILE.write_text(html_content, encoding='utf-8')
+    HTML_FILE.write_text(html_content, encoding='utf-8', newline='\n')
     print(f"  Updated: {HTML_FILE}")
 
 
