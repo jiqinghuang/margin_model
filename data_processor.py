@@ -137,6 +137,10 @@ def run_data_processor(decay_factor: float = 0.98, tolerance_level: float = 0.01
     output_path : str
         Path to save processed data (parquet format)
     """
+    if not (0 < decay_factor < 1):
+        raise ValueError(f'decay_factor must be in (0, 1) for EWMA, got {decay_factor}')
+    if not (0 < tolerance_level < 1):
+        raise ValueError(f'tolerance_level must be in (0, 1), got {tolerance_level}')
     k = int(np.ceil(np.log(tolerance_level) / np.log(decay_factor)))
     alpha_list = np.array([0.01, 0.003, 0.0001])
 

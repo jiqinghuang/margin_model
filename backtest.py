@@ -81,8 +81,8 @@ def backtest_method2(df_au: pd.DataFrame, df_ag: pd.DataFrame, eta: float = 1.8)
         df['breakthrough'] = df['abs_return'] > df['99.0% VaR']
         df['250d_breakthroughs'] = df['breakthrough'].rolling(window=250).sum()
 
-        # 同方法一：分母排除 EWMA 预热期
-        valid = df['99.0% VaR'].notna()
+        # 同方法一：分母排除 EWMA 预热期与无已实现收益的预测行
+        valid = df['99.0% VaR'].notna() & df[r_col].notna()
         total_bt = int(df.loc[valid, 'breakthrough'].sum())
         total_days = int(valid.sum())
         last_val = df['250d_breakthroughs'].iloc[-1]

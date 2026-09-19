@@ -62,6 +62,14 @@ class VarTests(unittest.TestCase):
         z = stats.norm.ppf(1 - alpha_list / 2)
         self.assertAlmostEqual(z[0], 2.5758293035489004, places=6)
 
+    def test_invalid_ewma_params_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'decay_factor'):
+            dp.run_data_processor(decay_factor=1.0)
+        with self.assertRaisesRegex(ValueError, 'decay_factor'):
+            dp.run_data_processor(decay_factor=0.0)
+        with self.assertRaisesRegex(ValueError, 'tolerance_level'):
+            dp.run_data_processor(tolerance_level=0.0)
+
     def test_process_data_end_to_end(self):
         rng = np.random.default_rng(3)
         n = 80

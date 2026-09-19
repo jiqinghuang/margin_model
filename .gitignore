@@ -14,3 +14,4 @@ Thumbs.db
 processed_data.parquet
 output_*.png
 backtest_results.xlsx
+stress_test_results.xlsx
