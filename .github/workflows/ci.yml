@@ -15,6 +15,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install numpy pandas scipy matplotlib openpyxl pyarrow
+        run: pip install -r requirements.txt
       - name: Run unit tests
         run: python -m unittest -v test_model

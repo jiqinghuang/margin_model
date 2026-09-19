@@ -3,6 +3,16 @@ import pandas as pd
 from scipy import stats
 
 
+def _forward_var_table(std_today: float, horizons: np.ndarray,
+                       z_scores: np.ndarray, var_names: list) -> pd.DataFrame:
+    """N 日远期 VaR 表：1 日波动率乘 √N，对数正态 VaR = exp(z·σ) − 1，输出单位 %。"""
+    table = pd.DataFrame(columns=['std_log'] + var_names)
+    for h in horizons:
+        vol = np.sqrt(h) * std_today
+        table.loc[f'{h} days'] = np.append(vol, np.exp(z_scores * vol) - 1) * 100
+    return table
+
+
 def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
                     decay_factor: float = 0.98):
     """
@@ -78,17 +88,8 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
     au_std_today = df_au.loc[today_date, 'std_log']
     ag_std_today = df_ag.loc[ag_today_date, 'std_log']
 
-    output_au = pd.DataFrame(columns=['std_log'] + var_names)
-    output_ag = pd.DataFrame(columns=['std_log'] + var_names)
-
-    for h in horizons:
-        vol_au = np.sqrt(h) * au_std_today
-        var_au = np.exp(z_scores * vol_au) - 1
-        output_au.loc[f'{h} days'] = np.append(vol_au, var_au) * 100
-
-        vol_ag = np.sqrt(h) * ag_std_today
-        var_ag = np.exp(z_scores * vol_ag) - 1
-        output_ag.loc[f'{h} days'] = np.append(vol_ag, var_ag) * 100
+    output_au = _forward_var_table(au_std_today, horizons, z_scores, var_names)
+    output_ag = _forward_var_table(ag_std_today, horizons, z_scores, var_names)
 
     print(f'\nAu -- based on forecast volatility {au_std:.3f}% on {today_date.date()}:')
     print(output_au.to_string())
@@ -103,17 +104,8 @@ def run_stress_test(df_au: pd.DataFrame, df_ag: pd.DataFrame,
     manual_vol_au = 2 / 100
     manual_vol_ag = 4 / 100
 
-    output_au_manual = pd.DataFrame(columns=['std_log'] + var_names)
-    output_ag_manual = pd.DataFrame(columns=['std_log'] + var_names)
-
-    for h in horizons:
-        vol_au = np.sqrt(h) * manual_vol_au
-        var_au = np.exp(z_scores * vol_au) - 1
-        output_au_manual.loc[f'{h} days'] = np.append(vol_au, var_au) * 100
-
-        vol_ag = np.sqrt(h) * manual_vol_ag
-        var_ag = np.exp(z_scores * vol_ag) - 1
-        output_ag_manual.loc[f'{h} days'] = np.append(vol_ag, var_ag) * 100
+    output_au_manual = _forward_var_table(manual_vol_au, horizons, z_scores, var_names)
+    output_ag_manual = _forward_var_table(manual_vol_ag, horizons, z_scores, var_names)
 
     print(f'\nAu -- manual volatility={manual_vol_au*100}%:')
     print(output_au_manual.to_string())

@@ -51,14 +51,13 @@ AGFI_WI.parquet ──┘                                                   └�
 ## 快速开始
 
 ```bash
-pip install numpy pandas scipy matplotlib openpyxl pyarrow
+pip install -r requirements.txt   # numpy/pandas/scipy/matplotlib/openpyxl/pyarrow + pillow(网站同步)
 python run_all.py
 
 # 单元测试
 python -m unittest -v test_model
 
-# 网站同步（另需 Pillow + 本地存在 jiqinghuang.github.io 仓库）
-pip install pillow
+# 网站同步（另需本地存在 jiqinghuang.github.io 仓库）
 python sync_to_website.py
 ```
 

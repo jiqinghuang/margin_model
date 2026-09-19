@@ -1,0 +1,10 @@
+# 保证金模型
+numpy
+pandas
+scipy
+matplotlib
+openpyxl
+pyarrow
+
+# 网站同步（sync_to_website.py 的 webp 转换与图片尺寸读取）
+pillow

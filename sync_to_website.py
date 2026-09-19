@@ -207,100 +207,45 @@ def update_html(stats: dict):
         "交易天数统计",
     )
 
-    # Update date ranges in captions
-    # Au date range
-    html_content = _sub_expect(
-        r'<span data-lang="cn">黄金 \(Au\) — [\d-]+ ~ [\d-]+</span>'
-        r'<span data-lang="en">Gold \(Au\) — [\d-]+ ~ [\d-]+</span>',
-        f'<span data-lang="cn">黄金 (Au) — {stats["au_start"]} ~ {stats["au_end"]}</span>'
-        f'<span data-lang="en">Gold (Au) — {stats["au_start"]} ~ {stats["au_end"]}</span>',
-        html_content,
-        "Au 日期范围",
-    )
+    # Update date ranges in captions (Au/Ag 各一段，结构相同)
+    metal_ranges = [
+        ('Au', 'au', '黄金 (Au)', 'Gold (Au)'),
+        ('Ag', 'ag', '白银 (Ag)', 'Silver (Ag)'),
+    ]
+    for metal, lower, cn_name, en_name in metal_ranges:
+        html_content = _sub_expect(
+            rf'<span data-lang="cn">{re.escape(cn_name)} — [\d-]+ ~ [\d-]+</span>'
+            rf'<span data-lang="en">{re.escape(en_name)} — [\d-]+ ~ [\d-]+</span>',
+            f'<span data-lang="cn">{cn_name} — {stats[f"{lower}_start"]} ~ {stats[f"{lower}_end"]}</span>'
+            f'<span data-lang="en">{en_name} — {stats[f"{lower}_start"]} ~ {stats[f"{lower}_end"]}</span>',
+            html_content,
+            f'{metal} 日期范围',
+        )
 
-    # Ag date range
-    html_content = _sub_expect(
-        r'<span data-lang="cn">白银 \(Ag\) — [\d-]+ ~ [\d-]+</span>'
-        r'<span data-lang="en">Silver \(Ag\) — [\d-]+ ~ [\d-]+</span>',
-        f'<span data-lang="cn">白银 (Ag) — {stats["ag_start"]} ~ {stats["ag_end"]}</span>'
-        f'<span data-lang="en">Silver (Ag) — {stats["ag_start"]} ~ {stats["ag_end"]}</span>',
-        html_content,
-        "Ag 日期范围",
-    )
-
-    # Update backtest results table row by row
-
-    # Au Method 1
-    html_content = _sub_expect(
-        r'<td><strong>Au</strong></td>\s*'
-        r'<td><span data-lang="cn">方法一（含阈值）</span><span data-lang="en">Method 1 \(w/ threshold\)</span></td>\s*'
-        r'<td>\d+</td>\s*'
-        r'<td>[\d,]+</td>\s*'
-        r'<td>[\d.]+%</td>\s*'
-        r'<td>\d+</td>',
-        f'<td><strong>Au</strong></td>\n'
-        f'              <td><span data-lang="cn">方法一（含阈值）</span><span data-lang="en">Method 1 (w/ threshold)</span></td>\n'
-        f'              <td>{stats["au_m1_bt"]}</td>\n'
-        f'              <td>{stats["au_m1_days"]:,}</td>\n'
-        f'              <td>{stats["au_m1_rate"]:.2f}%</td>\n'
-        f'              <td>{stats["au_m1_rolling"]}</td>',
-        html_content,
-        "Au 方法一表格行",
-    )
-
-    # Au Method 2
-    html_content = _sub_expect(
-        r'<td><strong>Au</strong></td>\s*'
-        r'<td><span data-lang="cn">方法二（η=1\.8）</span><span data-lang="en">Method 2 \(η=1\.8\)</span></td>\s*'
-        r'<td>\d+</td>\s*'
-        r'<td>[\d,]+</td>\s*'
-        r'<td>[\d.]+%</td>\s*'
-        r'<td>\d+</td>',
-        f'<td><strong>Au</strong></td>\n'
-        f'              <td><span data-lang="cn">方法二（η=1.8）</span><span data-lang="en">Method 2 (η=1.8)</span></td>\n'
-        f'              <td>{stats["au_m2_bt"]}</td>\n'
-        f'              <td>{stats["au_m2_days"]:,}</td>\n'
-        f'              <td>{stats["au_m2_rate"]:.2f}%</td>\n'
-        f'              <td>{stats["au_m2_rolling"]}</td>',
-        html_content,
-        "Au 方法二表格行",
-    )
-
-    # Ag Method 1
-    html_content = _sub_expect(
-        r'<td><strong>Ag</strong></td>\s*'
-        r'<td><span data-lang="cn">方法一（含阈值）</span><span data-lang="en">Method 1 \(w/ threshold\)</span></td>\s*'
-        r'<td>\d+</td>\s*'
-        r'<td>[\d,]+</td>\s*'
-        r'<td>[\d.]+%</td>\s*'
-        r'<td>\d+</td>',
-        f'<td><strong>Ag</strong></td>\n'
-        f'              <td><span data-lang="cn">方法一（含阈值）</span><span data-lang="en">Method 1 (w/ threshold)</span></td>\n'
-        f'              <td>{stats["ag_m1_bt"]}</td>\n'
-        f'              <td>{stats["ag_m1_days"]:,}</td>\n'
-        f'              <td>{stats["ag_m1_rate"]:.2f}%</td>\n'
-        f'              <td>{stats["ag_m1_rolling"]}</td>',
-        html_content,
-        "Ag 方法一表格行",
-    )
-
-    # Ag Method 2
-    html_content = _sub_expect(
-        r'<td><strong>Ag</strong></td>\s*'
-        r'<td><span data-lang="cn">方法二（η=1\.8）</span><span data-lang="en">Method 2 \(η=1\.8\)</span></td>\s*'
-        r'<td>\d+</td>\s*'
-        r'<td>[\d,]+</td>\s*'
-        r'<td>[\d.]+%</td>\s*'
-        r'<td>\d+</td>',
-        f'<td><strong>Ag</strong></td>\n'
-        f'              <td><span data-lang="cn">方法二（η=1.8）</span><span data-lang="en">Method 2 (η=1.8)</span></td>\n'
-        f'              <td>{stats["ag_m2_bt"]}</td>\n'
-        f'              <td>{stats["ag_m2_days"]:,}</td>\n'
-        f'              <td>{stats["ag_m2_rate"]:.2f}%</td>\n'
-        f'              <td>{stats["ag_m2_rolling"]}</td>',
-        html_content,
-        "Ag 方法二表格行",
-    )
+    # Update backtest results table row by row (Au/Ag × 方法一/方法二，结构相同)
+    method_specs = [
+        ('m1', '方法一（含阈值）', 'Method 1 (w/ threshold)'),
+        ('m2', '方法二（η=1.8）', 'Method 2 (η=1.8)'),
+    ]
+    for metal, lower, cn_name, en_name in metal_ranges:
+        for key, cn_label, en_label in method_specs:
+            html_content = _sub_expect(
+                rf'<td><strong>{metal}</strong></td>\s*'
+                rf'<td><span data-lang="cn">{re.escape(cn_label)}</span>'
+                rf'<span data-lang="en">{re.escape(en_label)}</span></td>\s*'
+                r'<td>\d+</td>\s*'
+                r'<td>[\d,]+</td>\s*'
+                r'<td>[\d.]+%</td>\s*'
+                r'<td>\d+</td>',
+                f'<td><strong>{metal}</strong></td>\n'
+                f'              <td><span data-lang="cn">{cn_label}</span><span data-lang="en">{en_label}</span></td>\n'
+                f'              <td>{stats[f"{lower}_{key}_bt"]}</td>\n'
+                f'              <td>{stats[f"{lower}_{key}_days"]:,}</td>\n'
+                f'              <td>{stats[f"{lower}_{key}_rate"]:.2f}%</td>\n'
+                f'              <td>{stats[f"{lower}_{key}_rolling"]}</td>',
+                html_content,
+                f'{metal} {cn_label} 表格行',
+            )
 
     # Write updated HTML
     HTML_FILE.write_text(html_content, encoding='utf-8')
